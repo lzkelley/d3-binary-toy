@@ -1,0 +1,42 @@
+body {
+    margin: 10px;
+}
+canvas {
+    border:5px solid rgba(0, 0, 0, 0.5);
+}
+* {
+    margin: 0;
+    padding: 0;
+}
+text {
+    font-size:16px;
+}
+
+text.counters {
+    /*padding: 10px;
+    position: relative;
+    height: 20px;*/
+}
+
+rect.counters {
+    fill: rgba(255, 255, 255, 0.6);
+}
+
+text .button {
+}
+
+rect.button {
+    fill: rgba(255, 255, 255, 0.6);
+    rx: 10;
+    ry: 10;
+    stroke: rgba(0, 0, 0, 0.6);
+    stroke-width: 1px;
+}
+
+/*#stateButton {
+    top: 50%;
+}
+
+#resetButton {
+    top: 40%;
+}*/
