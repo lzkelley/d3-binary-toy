@@ -23,3 +23,22 @@ svg rect.button {
     stroke: rgba(0, 0, 0, 0.6);
     stroke-width: 1px;
 }
+
+svg path.axis {
+    stroke: rgba(0, 0, 0, 1.0);
+    stroke-width: 1px;
+    fill: none;
+}
+
+svg path.line {
+    stroke-width: 2px;
+    fill: none;
+}
+
+svg path.line#m1 {
+    stroke: rgba(170, 0, 0, 0.7);
+}
+
+svg path.line#m2 {
+    stroke: rgba(0, 0, 170, 0.7);
+}
