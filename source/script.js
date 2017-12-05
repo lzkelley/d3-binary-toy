@@ -14,7 +14,7 @@ var EVOLVE = false;
 var EVOLUTION_INTERVAL = 10;
 var THREE_D = false;
 
-var NUM_PARTICLES = 800;
+var NUM_PARTICLES = 400;
 
 var svg = d3.select('#simContainer');
 
