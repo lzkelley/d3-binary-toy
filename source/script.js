@@ -43,8 +43,8 @@ var STAR_MASS = 0.01;
 var STORE_TIME_INTERVAL_FACTOR = 1.0;
 var XEDGE_INIT = 2.0;
 var YEDGE_INIT = 2.0;
-
-var LOG_SCALE = true;
+var XUNITS = 1000.0;
+var LOG_SCALE = false;
 
 if(NDIM == 2) {
     var bounds = [simWidth, simHeight];
@@ -64,7 +64,7 @@ var padLR = 4;
 var padTB = 4;
 var BUTTON_PAD_X = 6;
 var BUTTON_PAD_Y = 4;
-var xedge_log_min = EVOLUTION_INTERVAL;
+var xedge_log_min = EVOLUTION_INTERVAL/XUNITS;
 var yedge_log_min = 0.01;
 
 var STATE_RUN = false;
@@ -74,6 +74,10 @@ var store_time_interval = EVOLUTION_INTERVAL * STORE_TIME_INTERVAL_FACTOR;
 /*    ========    INITIALIZE OBJECTS    =========    */
 // These are all set in `reset()`
 var phaseInit, binary, particles, bhMassRatio, bhMassTotal, masses;
+
+// These are set in `initPlots()`
+var pathStringM1, pathStringM2, lineGenM1, lineGenM2;
+var xmin, xmax, ymin, ymax, xscale, yscale, xAxis, yAxis;
 
 counterData = [
     {name: "Particles", num: NUM_PARTICLES, x: 0, y: 20},
@@ -265,7 +269,7 @@ function integrateParticles(particles, dt) {
 }
 
 function store(tt) {
-    masses.push([tt/1000.0, binary[0].mass, binary[1].mass]);
+    masses.push([tt/XUNITS, binary[0].mass, binary[1].mass]);
 }
 
 function evolve(tt) {
@@ -334,8 +338,12 @@ function reset() {
 
     sim_time = 0.0;
     store_time = 0.0;
-    masses = [[0.0, m1, m2]];
+    masses = [[xedge_log_min, m1, m2]];
+    yedge_log_min = Math.min(0.5*m2, 0.1);
+}
 
+function runReset() {
+    reset();
     updateCounters();
     updateParticles(particles);
     updateBinary(binary);
@@ -396,7 +404,7 @@ function initButtons() {
     svgSim.append("rect")
         .attr("class", "button")
         .attr("id", "resetRect")
-        .on("click", toggleState);
+        .on("click", runReset);
 
     svgSim.append("text")
         .attr("class", "button")
@@ -405,7 +413,27 @@ function initButtons() {
         .attr("x", "98%")
         .attr("y", "4%")
         .text("Reset")
-        .on("click", reset);
+        .on("click", runReset);
+
+    // Scale Button
+    svgPlot.append("rect")
+        .attr("class", "button")
+        .attr("id", "scaleRect")
+        .on("click", toggleScale);
+
+    if( LOG_SCALE ){
+        var scaleText = "Linear";
+    } else {
+        var scaleText = "Log";
+    }
+    svgPlot.append("text")
+        .attr("class", "button")
+        .attr("id", "scaleText")
+        .attr("text-anchor", "end")
+        .attr("x", "98%")
+        .attr("y", "4%")
+        .text(scaleText)
+        .on("click", toggleScale);
 
 }
 
@@ -413,6 +441,14 @@ function toggleState(d, i) {
     STATE_RUN = !STATE_RUN
     updateButtons();
     t0 = t1 = 0.0;
+}
+
+function toggleScale() {
+    LOG_SCALE = !LOG_SCALE;
+
+    initPlotScales();
+    updateButtons();
+    updatePlots(true);
 }
 
 function updateButtons() {
@@ -454,12 +490,86 @@ function updateButtons() {
         .style("width", textBB.width + 2*BUTTON_PAD_X)
         .style("height", textBB.height + 2*BUTTON_PAD_Y);
 
+        // == State Button == //
+        stateText = svgSim.selectAll("#stateText");
+        textBB = stateText.node().getBBox();
+        var yy = 0.02*simHeight + textBB.height;
+        stateText.attr("y", yy);
+
+        stateText.text(function (d) {
+            if (!STATE_RUN) {
+                return "Start";
+            } else {
+                return "Stop";
+            }
+        });
+
+    // == Scale Button == //
+    scaleText = svgPlot.selectAll("#scaleText");
+    textBB = scaleText.node().getBBox();
+    var yy = 0.02*simHeight + textBB.height;
+    scaleText.attr("y", yy);
+
+    scaleText.text(function (d) {
+        if (LOG_SCALE) {
+            return "Linear";
+        } else {
+            return "Log";
+        }
+    });
+
+    // Have to update the BBox
+    textBB = scaleText.node().getBBox();
+    stateRect = svgPlot.selectAll("#scaleRect")
+        .style("x", textBB.x - BUTTON_PAD_X)
+        .style("y", textBB.y - BUTTON_PAD_Y)
+        .style("width", textBB.width + 2*BUTTON_PAD_X)
+        .style("height", textBB.height + 2*BUTTON_PAD_Y);
+
+}
+
+function initPlotScales() {
+    // == Scales and Axes == //
+    if( LOG_SCALE ){
+        xscale = d3.scaleLog();
+        yscale = d3.scaleLog();
+        xmin = xedge_log_min;
+        ymin = yedge_log_min;
+    } else {
+        xscale = d3.scaleLinear();
+        yscale = d3.scaleLinear();
+        xmin = 0.0;
+        ymin = 0.0;
+    }
+
+    xscale = xscale.domain([xmin, XEDGE_INIT])
+        .range([0.0, plotWidth - 100]);
+    yscale = yscale.domain([ymin, YEDGE_INIT])
+        .range([plotHeight/2, 0]);
+
+    xAxis.scale(xscale);
+    yAxis.scale(yscale);
 }
 
 function initPlots() {
-    var pathStringM1 = lineGenM1(masses);
-    var pathStringM2 = lineGenM2(masses);
 
+    xAxis = d3.axisBottom();  // .scale(xscale);
+    yAxis = d3.axisLeft().ticks(5);  // .scale(yscale);
+
+    initPlotScales();
+
+    // == Lines and Generators == //
+    lineGenM1 = d3.line()
+        .x(function(d) { return xscale(d[0]); })
+        .y(function(d) { return yscale(d[1]); });
+    lineGenM2 = d3.line()
+        .x(function(d) { return xscale(d[0]); })
+        .y(function(d) { return yscale(d[2]); });
+
+    pathStringM1 = lineGenM1(masses);
+    pathStringM2 = lineGenM2(masses);
+
+    // == Add to Figure == //
     svgPlot.append("path")
         .attr("class", "line")
         .attr("id", "m1")
@@ -472,6 +582,20 @@ function initPlots() {
         .attr("transform", "translate(50, 10)")
     	.attr('d', pathStringM2);
 
+    svgPlot.append("g")
+        .attr("class", "axis")
+        .attr("id", "yaxis")
+        .attr("transform", "translate(50, 10)")
+        .call(yAxis);
+
+    var xAxisTranslate = plotHeight/2 + 10;
+
+    svgPlot.append("g")
+        .attr("class", "axis")
+        .attr("id", "xaxis")
+        .attr("transform", "translate(50, " + xAxisTranslate  +")")
+        .call(xAxis);
+
 }
 
 function updatePlots(reset=false) {
@@ -480,14 +604,19 @@ function updatePlots(reset=false) {
 
     // Update xaxes
     lastTime = masses.slice(-1)[0][0];
-    edge = xscale.domain()[1];
-    if(lastTime > 0.8*edge || reset){
+    xmax = xscale.domain()[1];
+    if(lastTime > 0.8*xmax || reset){
+        xmin = xscale.domain()[0];
         if (reset) {
             newEdge = XEDGE_INIT;
         } else {
-            newEdge = 2.0 * edge;
+            if(LOG_SCALE) {
+                newEdge =  3.14 * xmax;
+            } else {
+                newEdge = 2.0 * xmax;
+            }
         }
-        xscale.domain([0.0, newEdge]);
+        xscale.domain([xmin, newEdge]);
 
         svgPlot.select("#xaxis")
             .transition().duration(500).ease(d3.easeSinInOut)
@@ -499,14 +628,19 @@ function updatePlots(reset=false) {
     console.log(lastMass);
     lastMass = Math.max(lastMass[1], lastMass[2]);
     console.log(lastMass);
-    edge = yscale.domain()[1];
-    if(lastMass > 0.8*edge || reset){
+    ymax = yscale.domain()[1];
+    if(lastMass > 0.8*ymax || reset){
+        ymin = yscale.domain()[0];
         if (reset) {
             newEdge = YEDGE_INIT;
         } else {
-            newEdge = 1.5 * edge;
+            if(LOG_SCALE) {
+                newEdge = 3.14 * ymax;
+            } else {
+                newEdge = 1.5 * ymax;
+            }
         }
-        yscale.domain([0.0, newEdge]);
+        yscale.domain([ymin, newEdge]);
 
         svgPlot.select("#yaxis")
             .transition().duration(500).ease(d3.easeSinInOut)
@@ -526,56 +660,23 @@ function updatePlots(reset=false) {
     	.attr('d', pathStringM2);
 }
 
-/*   =========    PLOTS        =========   */
 
-var xscale = d3.scaleLinear()
-               .domain([0.0, XEDGE_INIT])
-               .range([0.0, plotWidth - 100]);
+/*    ========    RUN SIMULATION    =========    */
 
-var yscale = d3.scaleLinear()
-               .domain([0, YEDGE_INIT])
-               .range([plotHeight/2, 0]);
-
-var xAxis = d3.axisBottom().scale(xscale);
-
-var yAxis = d3.axisLeft().ticks(5).scale(yscale);
-
-svgPlot.append("g")
-    .attr("class", "axis")
-    .attr("id", "yaxis")
-    .attr("transform", "translate(50, 10)")
-    .call(yAxis);
-
-var xAxisTranslate = plotHeight/2 + 10;
-
-svgPlot.append("g")
-    .attr("class", "axis")
-    .attr("id", "xaxis")
-    .attr("transform", "translate(50, " + xAxisTranslate  +")")
-    .call(xAxis);
-
-var lineGenM1 = d3.line()
-    .x(function(d) { return xscale(d[0]); })
-    .y(function(d) { return yscale(d[1]); });
-
-var lineGenM2 = d3.line()
-    .x(function(d) { return xscale(d[0]); })
-    .y(function(d) { return yscale(d[2]); });
-
-
-/*    ========    SIMULATION    =========    */
 
 reset();
 
-// console.log("Masses = ", masses);
-
 initPlots();
 
-// Call this after particles and binaries so that it's on top.
+updateParticles(particles);
+updateBinary(binary);
+
+// Call this after particles and binaries so that counters are on top.
 initCounters();
 updateCounters();
 
 initButtons();
 updateButtons();
 
+// Loop
 var interval = d3.interval(evolve, EVOLUTION_INTERVAL);
