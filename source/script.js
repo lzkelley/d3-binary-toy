@@ -39,12 +39,14 @@ var GRAVITY = 20.0
 var GRAVITY_SOFT_LENGTH = 20.0;
 var PARTICLE_RADIUS = simWidth/200.0;
 var NDIM = 2 + THREE_D;
-var STAR_MASS = 0.01;
+var STAR_MASS = 0.002;
 var STORE_TIME_INTERVAL_FACTOR = 1.0;
 var XEDGE_INIT = 2.0;
 var YEDGE_INIT = 2.0;
 var XUNITS = 1000.0;
 var LOG_SCALE = false;
+
+var FEED_RATE = 10.0;
 
 if(NDIM == 2) {
     var bounds = [simWidth, simHeight];
@@ -53,10 +55,13 @@ if(NDIM == 2) {
 }
 
 var maxSize = 50;
-var sma = 100;
+// var separation = 100;
+var MIN_SEPARATION = 50;
+var MAX_SEPARATION = 300;
 var period = 12*1000;
 var sim_time = 0.0;
 var store_time = 0.0;
+var feed_time = 0.0;
 var STAR_COLOR = "rgba(126, 126, 126, 0.5)";
 var BH_COLOR = "#292929";
 var BH_RADIUS = 40.0;
@@ -73,7 +78,7 @@ var store_time_interval = EVOLUTION_INTERVAL * STORE_TIME_INTERVAL_FACTOR;
 
 /*    ========    INITIALIZE OBJECTS    =========    */
 // These are all set in `reset()`
-var phaseInit, binary, particles, bhMassRatio, bhMassTotal, masses;
+var phaseInit, binary, particles, bhMassRatio, bhMassTotal, masses, separation;
 
 // These are set in `initPlots()`
 var pathStringM1, pathStringM2, lineGenM1, lineGenM2;
@@ -85,6 +90,8 @@ counterData = [
     {name: "Created", num: 0, x: 0, y: 60}
 ]
 
+// These are set in `initSliders()`
+var sliderScaleM1, sliderM1, sval, handle;
 
 // Storage for definitions, 'defs' tells SVG they are resources
 var defs = svgSim.append("defs");
@@ -125,7 +132,7 @@ var br = 0.0, bhRad = 0.0, soft = 0.0, distCubed = 0.0, pRad = 0.0;
 var dr = new Array(NDIM);
 var t0 = 0.0;
 var t1 = 0.0;
-var rad = 0.0, vals;
+var rad = 0.0, vals, feed_num, news, olds;
 var lastTime = 0.0, edge = 0.0, newEdge = 0.0;
 
 /*    ========    FUNCTIONS    =========    */
@@ -135,7 +142,7 @@ function format(num) {
 }
 
 function binaryPosition(bin){
-    rad = sma * (bhMassTotal - bin.mass)/bhMassTotal
+    rad = separation * (bhMassTotal - bin.mass)/bhMassTotal
     vals = [
         0.5*simWidth + rad*Math.cos(2*Math.PI*bin.phase),
         0.5*simHeight + rad*Math.sin(2*Math.PI*bin.phase)
@@ -146,12 +153,13 @@ function binaryPosition(bin){
     return vals;
 }
 
-function updateBinary(binary) {
+function updateBinary() {
     var selection = svgSim.selectAll(".bh")
     	.data(binary);
 
     // Remove old
-    var olds = selection.exit();
+    // console.log("sel = ", selection);
+    olds = selection.exit();
     olds.remove();
 
     // for(var k = 0; k < 2; k++){
@@ -159,7 +167,7 @@ function updateBinary(binary) {
     // }
 
     // Add new elements
-    var news = selection.enter();
+    news = selection.enter();
     news.append("circle")
         .attr("id", function(d){ return "bh-" + d.name; })
     	.attr("class", "bh")
@@ -173,6 +181,27 @@ function updateBinary(binary) {
     selection.attr("cx", function(d, i) { return binaryPosition(d)[0]; })
         .attr("cy", function(d, i) { return binaryPosition(d)[1]; })
         .attr("r", function(d) { return bhSize(d.mass); });
+}
+
+function addParticles(num) {
+    if( num < 1 ) return;
+
+    news = d3.range(num).map(function(i) {
+        var vals = new Array(3*NDIM);
+        for(var ii = 0; ii < NDIM; ii++) {
+            // Positions
+            // vals[ii] = bounds[ii] * Math.random();
+            //   Put new particles at one of the boundaries
+            vals[ii] = bounds[ii] * 2*(Math.random() > 0.5) - 1;
+            // Velocities
+            vals[ii + NDIM] = 2*(Math.random() - 0.5);
+            // Accelerations
+            vals[ii + NDIM*2] = 0.0;
+        }
+        return vals;
+    });
+    particles = particles.concat(news);
+    counterData[2].num += num;
 }
 
 function updateParticles(particles) {
@@ -282,6 +311,7 @@ function evolve(tt) {
     dt = (t1 - t0) * (t0 > 0 && t1 > 0);
     sim_time += dt;
     store_time += dt;
+    feed_time += dt;
 
     if(store_time > store_time_interval){
         store_time = 0.0;
@@ -291,12 +321,17 @@ function evolve(tt) {
 
     if(PARTICLE_MOTION) {
         integrateParticles(particles, dt);
+        if (FEED_RATE > 0.0) {
+            feed_num = Math.floor(feed_time*FEED_RATE/1000.0);
+            addParticles(feed_num);
+            feed_time -= feed_num * 1000 / FEED_RATE;
+        }
         updateParticles(particles);
     }
 
     if(BINARY_MOTION) {
         integrateBinary(binary, dt);
-        updateBinary(binary);
+        updateBinary();
     }
 
     updatePlots();
@@ -306,6 +341,7 @@ function evolve(tt) {
 function reset() {
     console.log("RESET!");
 
+    separation = Math.random()*(MAX_SEPARATION - MIN_SEPARATION) + MIN_SEPARATION
     bhMassTotal = 1.0;
     bhMassRatio = Math.random();
     m1 = bhMassTotal/(1.0 + bhMassRatio);
@@ -338,6 +374,7 @@ function reset() {
 
     sim_time = 0.0;
     store_time = 0.0;
+    feed_time = 0.0;
     masses = [[xedge_log_min, m1, m2]];
     yedge_log_min = Math.min(0.5*m2, 0.1);
 }
@@ -346,9 +383,11 @@ function runReset() {
     reset();
     updateCounters();
     updateParticles(particles);
-    updateBinary(binary);
+    updateBinary();
     updatePlots(true);
 }
+
+// == Plot / Figure Stuff == //
 
 function initCounters() {
     var texts = svgSim.selectAll("text.counters")
@@ -660,6 +699,150 @@ function updatePlots(reset=false) {
     	.attr('d', pathStringM2);
 }
 
+// == Sliders == //
+
+function slide1(sval) {
+    binary[0].mass = sliderScaleM1.invert(sval);
+    handleM1.attr("cx", sliderScaleM1(binary[0].mass));
+    bhMassTotal = binary[0].mass + binary[1].mass;
+    updateBinary();
+}
+
+function slide2(sval) {
+    binary[1].mass = sliderScaleM2.invert(sval);
+    handleM2.attr("cx", sliderScaleM2(binary[1].mass));
+    bhMassTotal = binary[0].mass + binary[1].mass;
+    updateBinary();
+}
+
+function slideR(sval) {
+    separation = sliderScaleR.invert(sval);
+    handleR.attr("cx", sliderScaleR(separation));
+    updateBinary();
+}
+
+function initSliders() {
+    var ypos = 18;
+
+    // == Primary Mass == //
+    sliderScaleM1 = d3.scaleLinear()
+        .domain([0.1, 2.0])
+        .range([0, 0.5*simWidth])
+        .clamp(true);
+
+    sliderM1 = svgSim.append("g")
+        .attr("class", "slider")
+        .attr("transform", "translate(" + 0.25*simWidth + "," + ypos + ")");
+
+    var drag1 = d3.drag()
+        .on("start.interrupt", function() { sliderM1.interrupt(); })
+        .on("start drag", function() { slide1(d3.event.x); });
+
+    sliderM1.append("line")
+        .attr("class", "track")
+        .attr("x1", sliderScaleM1.range()[0])
+        .attr("x2", sliderScaleM1.range()[1])
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-inset")
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-overlay")
+        .call(drag1);
+
+    sliderM1.append("text")
+        .attr("class", "label")
+        .attr("id", "sliderM1Text")
+        .attr("text-anchor", "right")
+        .attr("x", -30)
+        .attr("y", 5)
+        .text("M1");
+
+    handleM1 = sliderM1.insert("circle", ".track-overlay")
+        .attr("class", "handle")
+        .attr("id", "handleM1")
+        .attr("r", 9)
+        .attr("cx", sliderScaleM1(binary[0].mass));
+
+
+    // == Secondary Mass == //
+
+    sliderScaleM2 = d3.scaleLinear()
+        .domain([0.1, 2.0])
+        .range([0, 0.5*simWidth])
+        .clamp(true);
+
+    sliderM2 = svgSim.append("g")
+        .attr("class", "slider")
+        .attr("transform", "translate(" + 0.25*simWidth + "," + 2*ypos + ")");
+
+    var drag2 = d3.drag()
+        .on("start.interrupt", function() { sliderM2.interrupt(); })
+        .on("start drag", function() { slide2(d3.event.x); });
+
+    sliderM2.append("line")
+        .attr("class", "track")
+        .attr("x1", sliderScaleM2.range()[0])
+        .attr("x2", sliderScaleM2.range()[1])
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-inset")
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-overlay")
+        .call(drag2);
+
+    sliderM2.append("text")
+        .attr("class", "label")
+        .attr("id", "sliderM2Text")
+        .attr("text-anchor", "right")
+        .attr("x", -30)
+        .attr("y", 5)
+        .text("M2");
+
+    handleM2 = sliderM2.insert("circle", ".track-overlay")
+        .attr("class", "handle")
+        .attr("id", "handleM2")
+        .attr("r", 9)
+        .attr("cx", sliderScaleM2(binary[1].mass));
+
+    // == Binary Separation == //
+
+    sliderScaleR = d3.scaleLinear()
+        .domain([MIN_SEPARATION, MAX_SEPARATION])
+        .range([0, 0.5*simWidth])
+        .clamp(true);
+
+    sliderR = svgSim.append("g")
+        .attr("class", "slider")
+        .attr("transform", "translate(" + 0.25*simWidth + "," + 3*ypos + ")");
+
+    var dragR = d3.drag()
+        .on("start.interrupt", function() { sliderR.interrupt(); })
+        .on("start drag", function() { slideR(d3.event.x); });
+
+    sliderR.append("line")
+        .attr("class", "track")
+        .attr("x1", sliderScaleR.range()[0])
+        .attr("x2", sliderScaleR.range()[1])
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-inset")
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-overlay")
+        .call(dragR);
+
+    sliderR.append("text")
+        .attr("class", "label")
+        .attr("id", "sliderRText")
+        .attr("text-anchor", "right")
+        .attr("x", -23)
+        .attr("y", 5)
+        .text("R");
+
+    handleR = sliderR.insert("circle", ".track-overlay")
+        .attr("class", "handle")
+        .attr("id", "handleR")
+        .attr("r", 9)
+        .attr("cx", sliderScaleR(separation));
+
+}
+
 
 /*    ========    RUN SIMULATION    =========    */
 
@@ -669,7 +852,9 @@ reset();
 initPlots();
 
 updateParticles(particles);
-updateBinary(binary);
+updateBinary();
+
+initSliders();
 
 // Call this after particles and binaries so that counters are on top.
 initCounters();
