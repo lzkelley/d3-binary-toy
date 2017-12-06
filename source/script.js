@@ -3,7 +3,6 @@
  *
  *
  */
-console.log("script.js");
 
 /*    ========    SETTINGS    =========    */
 
@@ -46,7 +45,7 @@ var YEDGE_INIT = 2.0;
 var XUNITS = 1000.0;
 var LOG_SCALE = false;
 
-var FEED_RATE = 10.0;
+var feed_rate = 10.0;
 
 if(NDIM == 2) {
     var bounds = [simWidth, simHeight];
@@ -158,13 +157,8 @@ function updateBinary() {
     	.data(binary);
 
     // Remove old
-    // console.log("sel = ", selection);
     olds = selection.exit();
     olds.remove();
-
-    // for(var k = 0; k < 2; k++){
-    //     console.log(k, binary[k].mass, binaryPosition(binary[k]));
-    // }
 
     // Add new elements
     news = selection.enter();
@@ -177,7 +171,6 @@ function updateBinary() {
         .attr("cy", function(d, i) { return binaryPosition(d)[1]; });
 
     // Update elements
-    // console.log("olds = ", selection.size());
     selection.attr("cx", function(d, i) { return binaryPosition(d)[0]; })
         .attr("cy", function(d, i) { return binaryPosition(d)[1]; })
         .attr("r", function(d) { return bhSize(d.mass); });
@@ -205,27 +198,22 @@ function addParticles(num) {
 }
 
 function updateParticles(particles) {
-    // console.log("particles length = ", particles.length)
     var selection = svgSim.selectAll(".particleCircle")
         .data(particles);
     counterData[0].num = selection.size()
-    // console.log("selection length = ", selection.size())
 
     // Update elements
-    // console.log("selection: ", selection.size());
     selection.attr("cx", function(d, i) { return d[0]; })
         .attr("cy", function(d, i) { return d[1]; })
         .attr("r", function(d) { return pSize(d); })
 
     // Remove deleted elements
     var dels = selection.exit();
-    // console.log("dels: ", dels.size());
     dels.remove();
     counterData[1].num += dels.size();
 
     // Add new elements
     var adds = selection.enter();
-    // console.log("adds: ", adds.size());
     counterData[0].num += adds.size()
     adds.append("circle")
         .attr("id", function(d){ return "particleCircle-" + d.name; })
@@ -248,12 +236,10 @@ function integrateBinary(binary, dt) {
 function integrateParticles(particles, dt) {
     for(var ii = 0; ii < particles.length; ii++) {
         for(var jj = 0; jj < NDIM; jj++) {
-            // if(ii == 0) console.log("pos =", particles[ii][jj]);
             // Update particle positions
             particles[ii][jj] += particles[ii][jj+NDIM] * dt * VEL_SCALE;
             // Update velocities
             particles[ii][jj+NDIM] += particles[ii][jj+2*NDIM] * dt * GRAVITY;
-            // if(ii == 0) console.log("vel =", particles[ii][jj+NDIM]);
             // Check for out of bounds
             if(particles[ii][jj] < 0.0) { particles[ii][jj] += bounds[jj]; }
             if(particles[ii][jj] > bounds[jj]) { particles[ii][jj] -= bounds[jj]; }
@@ -285,16 +271,8 @@ function integrateParticles(particles, dt) {
                     particles[ii][jj + 2*NDIM] = - dr[jj] * binary[kk].mass/distCubed;
                 }
             }
-        }
-
-        // console.log(ii, particles[ii]);
-        // if(isNaN(particles[ii][0])) {
-        //     console.log("STOP");
-        //     interval.stop();
-        //     break;
-        // }
-
-    }
+        } // kk
+    } // ii
 }
 
 function store(tt) {
@@ -316,15 +294,14 @@ function evolve(tt) {
     if(store_time > store_time_interval){
         store_time = 0.0;
         store(sim_time);
-        // console.log("Length = ", masses.length);
     }
 
     if(PARTICLE_MOTION) {
         integrateParticles(particles, dt);
-        if (FEED_RATE > 0.0) {
-            feed_num = Math.floor(feed_time*FEED_RATE/1000.0);
+        if (feed_rate > 0.0) {
+            feed_num = Math.floor(feed_time*feed_rate/1000.0);
             addParticles(feed_num);
-            feed_time -= feed_num * 1000 / FEED_RATE;
+            feed_time -= feed_num * 1000 / feed_rate;
         }
         updateParticles(particles);
     }
@@ -339,15 +316,13 @@ function evolve(tt) {
 }
 
 function reset() {
-    console.log("RESET!");
-
     separation = Math.random()*(MAX_SEPARATION - MIN_SEPARATION) + MIN_SEPARATION
     bhMassTotal = 1.0;
     bhMassRatio = Math.random();
     m1 = bhMassTotal/(1.0 + bhMassRatio);
     m2 = bhMassTotal - m1;
-    console.log("m1 = ", format(m1), "; m2 = ",
-                format(m2), "; mu = ", format(m2/m1), "; M = ", format(m1+m2));
+    // console.log("m1 = ", format(m1), "; m2 = ",
+    //             format(m2), "; mu = ", format(m2/m1), "; M = ", format(m1+m2));
 
     phaseInit = Math.random();
     binary = [
@@ -664,9 +639,7 @@ function updatePlots(reset=false) {
 
     // Update yaxes
     lastMass = masses.slice(-1)[0];
-    console.log(lastMass);
     lastMass = Math.max(lastMass[1], lastMass[2]);
-    console.log(lastMass);
     ymax = yscale.domain()[1];
     if(lastMass > 0.8*ymax || reset){
         ymin = yscale.domain()[0];
@@ -719,6 +692,11 @@ function slideR(sval) {
     separation = sliderScaleR.invert(sval);
     handleR.attr("cx", sliderScaleR(separation));
     updateBinary();
+}
+
+function slideF(sval) {
+    feed_rate = sliderScaleF.invert(sval);
+    handleF.attr("cx", sliderScaleF(feed_rate));
 }
 
 function initSliders() {
@@ -840,6 +818,45 @@ function initSliders() {
         .attr("id", "handleR")
         .attr("r", 9)
         .attr("cx", sliderScaleR(separation));
+
+    // == Feeding Rate == //
+
+    sliderScaleF = d3.scaleLinear()
+        .domain([0.0, 100.0])
+        .range([0, 0.5*simWidth])
+        .clamp(true);
+
+    sliderF = svgSim.append("g")
+        .attr("class", "slider")
+        .attr("transform", "translate(" + 0.25*simWidth + "," + (simHeight - ypos) + ")");
+
+    var dragF = d3.drag()
+        .on("start.interrupt", function() { sliderF.interrupt(); })
+        .on("start drag", function() { slideF(d3.event.x); });
+
+    sliderF.append("line")
+        .attr("class", "track")
+        .attr("x1", sliderScaleF.range()[0])
+        .attr("x2", sliderScaleF.range()[1])
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-inset")
+      .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+        .attr("class", "track-overlay")
+        .call(dragF);
+
+    // sliderF.append("text")
+    //     .attr("class", "label")
+    //     .attr("id", "sliderFText")
+    //     .attr("text-anchor", "right")
+    //     .attr("x", -23)
+    //     .attr("y", 5)
+    //     .text("F");
+
+    handleF = sliderF.insert("circle", ".track-overlay")
+        .attr("class", "handle")
+        .attr("id", "handleF")
+        .attr("r", 9)
+        .attr("cx", sliderScaleF(feed_rate));
 
 }
 
